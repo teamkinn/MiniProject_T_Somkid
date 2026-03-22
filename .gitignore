@@ -1,79 +1,19 @@
-# Python - Virtual Environment
 venv_tf/
-venv/
-env/
-ENV/
-
-# Python - Cache and compiled files
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-
-# Machine Learning Models (Large files)
-*.keras
-*.h5
-*.pkl
-*.joblib
-*.model
-*.pb
-*.onnx
-
-# Environment Variables
-.env
-.env.local
-.env.*.local
-.env.*
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.fleet
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Uploads
-backend/uploads/*
-!backend/uploads/.gitkeep
-uploads/*
-!uploads/.gitkeep
-
-# Build and dist
-dist/
-build/
-.next/
 .nuxt/
-.output/
-.cache/
-
-# Node modules
-node_modules/
-.npm
-.yarn
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-
-# Misc
-.history/
-.DS_Store
-*.bak
-*.tmp
+.vscode/
+frontend/
+backend/
+*.jpg
+*.png
+history.txt
+package.json
+predict.py
+train.py
+test_train.py
+split_by_filename.py
+split_train_to_val.py
+classes.txt
+general_classes.txt
+best.keras
+bin4_best.keras
+general_model.keras
