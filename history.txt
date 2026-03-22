@@ -1,0 +1,432 @@
+<template>
+  <BaseCard>
+    <h2 style="margin:0 0 10px;">ประวัติการใช้งาน</h2>
+
+    <LoadingSpinner v-if="loadingMe" />
+    <p v-if="meError" style="color:var(--danger); margin:0 0 10px;">{{ meError }}</p>
+
+    <div v-if="me" style="display:grid; gap:12px;">
+      <!-- Filter bar -->
+      <BaseCard>
+        <div class="row" style="gap:10px; flex-wrap:wrap;">
+          <input v-model="filters.q" type="search" placeholder="ค้นหา (label/คำแนะนำ/username)" style="min-width:220px;" />
+          <select v-model="filters.label" style="min-width:180px;">
+            <option value="">ทุกประเภท</option>
+            <option value="general">General</option>
+            <option value="recycle">Recycle</option>
+            <option value="organic">Organic</option>
+            <option value="hazardous">Hazardous</option>
+          </select>
+          <input v-model="filters.from" type="date" />
+          <input v-model="filters.to" type="date" />
+          <BaseButton variant="secondary" @click="reload(1)">ค้นหา</BaseButton>
+          <BaseButton variant="secondary" @click="clearFilters">ล้าง</BaseButton>
+        </div>
+      </BaseCard>
+
+      <!-- User mode -->
+      <BaseCard v-if="me.role === 'user'">
+        <div class="muted" style="margin-bottom:10px;">คุณจะเห็นเฉพาะประวัติของตัวเอง</div>
+        <HistoryList
+          :items="items"
+          :loading="loading"
+          :error="error"
+          :page="page"
+          :total-pages="totalPages"
+          @go="reload"
+          @open="openDetail"
+        />
+      </BaseCard>
+
+      <!-- Admin mode -->
+      <BaseCard v-else>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+          <BaseButton :variant="adminView==='users' ? 'primary' : 'secondary'" @click="setAdminView('users')">
+            ดูรายชื่อผู้ใช้
+          </BaseButton>
+          <BaseButton :variant="adminView==='all' ? 'primary' : 'secondary'" @click="setAdminView('all')">
+            ดูประวัติทั้งหมด
+          </BaseButton>
+        </div>
+
+        <!-- Admin: Users list -->
+        <div v-if="adminView==='users'" style="display:grid; gap:12px;">
+          <BaseCard>
+            <div class="row" style="gap:10px; flex-wrap:wrap;">
+              <input v-model="userSearch" placeholder="ค้นหา user (username/name/email)" style="min-width:260px;" />
+              <BaseButton variant="secondary" @click="loadUsers">ค้นหา user</BaseButton>
+            </div>
+            <p class="muted" style="margin:10px 0 0;">
+              คลิกผู้ใช้เพื่อดูประวัติของคนนั้น
+            </p>
+          </BaseCard>
+
+          <LoadingSpinner v-if="loadingUsers" />
+          <p v-if="usersError" style="color:var(--danger); margin:0;">{{ usersError }}</p>
+
+          <div v-if="users.length" style="display:grid; gap:10px;">
+            <BaseCard v-for="u in users" :key="u._id" style="cursor:pointer;" @click="selectUser(u)">
+              <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                <div>
+                  <div><b>{{ u.username }}</b> — {{ u.name }}</div>
+                  <div class="muted" style="font-size:12px;">{{ u.email }}</div>
+                </div>
+                <div class="muted" style="text-align:right; font-size:12px;">
+                  <div>ประวัติ: {{ u.usageCount }}</div>
+                  <div v-if="u.lastUsed">ล่าสุด: {{ new Date(u.lastUsed).toLocaleString() }}</div>
+                </div>
+              </div>
+            </BaseCard>
+          </div>
+
+          <!-- ย้ายการแสดงประวัติไปเป็น Popup -->
+        </div>
+
+        <!-- Admin: All history -->
+        <div v-else>
+          <div class="muted">กดปุ่มเพื่อเปิดรายการประวัติทั้งหมด (Popup)</div>
+          <div class="row" style="gap:10px; margin-top:10px; flex-wrap:wrap;">
+            <BaseButton variant="primary" @click="openAllHistory">เปิดประวัติทั้งหมด</BaseButton>
+          </div>
+        </div>
+      </BaseCard>
+    </div>
+
+    <!-- Popup รายการประวัติ (เหมือนหน้าผลการสแกน) -->
+    <div v-if="historyOpen" class="modal-backdrop" @click.self="closeHistory">
+      <div class="modal modal-lg">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:800; font-size:18px;">{{ historyTitle }}</div>
+            <div class="muted" style="font-size:12px;">คลิกรายการเพื่อดูรายละเอียด (จะแสดง วิเคราะห์ถูก/ไม่ถูก ด้วย)</div>
+          </div>
+          <BaseButton variant="secondary" @click="closeHistory">ปิด</BaseButton>
+        </div>
+
+        <div style="margin-top:12px;">
+          <HistoryList
+            :items="items"
+            :loading="loading"
+            :error="error"
+            :page="page"
+            :total-pages="totalPages"
+            @go="reload"
+            @open="openDetail"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- Popup รายละเอียดประวัติ -->
+    <div v-if="detailOpen" class="modal-backdrop" @click.self="closeDetail">
+      <div class="modal">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div>
+            <div style="font-weight:800; font-size:18px;">รายละเอียดประวัติ</div>
+            <div class="muted" style="font-size:12px;">{{ detailItem ? new Date(detailItem.createdAt).toLocaleString() : '' }}</div>
+          </div>
+          <BaseButton variant="secondary" @click="closeDetail">ปิด</BaseButton>
+        </div>
+
+        <div v-if="detailItem" style="display:grid; gap:12px; margin-top:12px;">
+          <div style="display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;">
+            <img
+              v-if="detailItem.imagePath"
+              :src="'/' + detailItem.imagePath"
+              style="width:160px; height:160px; object-fit:cover; border-radius:14px; border:1px solid var(--line); background:rgba(255,255,255,0.04);"
+            />
+            <div style="flex:1; min-width:240px;">
+              <div style="display:grid; gap:8px;">
+                <div><span class="muted">ผู้ใช้:</span> <b>{{ detailItem.username || '-' }}</b></div>
+                <div><span class="muted">ผลทำนาย:</span> <b>{{ detailItem.label }}</b> ({{ (detailItem.confidence * 100).toFixed(1) }}%)</div>
+                <div v-if="detailItem.correctedLabel"><span class="muted">แก้เป็น:</span> <b>{{ detailItem.correctedLabel }}</b></div>
+                <div v-if="detailItem.isCorrect !== null"><span class="muted">Feedback:</span> <b>{{ detailItem.isCorrect ? 'ถูก' : 'ไม่ถูก' }}</b></div>
+                <div v-if="detailItem.suggestion" class="muted">คำแนะนำ: {{ detailItem.suggestion }}</div>
+              </div>
+            </div>
+          </div>
+
+          <BaseCard v-if="detailItem.topK?.length">
+            <div style="font-weight:700; margin-bottom:8px;">Top alternatives</div>
+            <div style="display:grid; gap:8px;">
+              <div v-for="(a, idx) in detailItem.topK" :key="idx" class="row" style="justify-content:space-between;">
+                <div><b>{{ a.label }}</b></div>
+                <div class="muted">{{ Math.round(a.confidence * 100) }}%</div>
+              </div>
+            </div>
+          </BaseCard>
+        </div>
+      </div>
+    </div>
+  </BaseCard>
+</template>
+
+<script setup lang="ts">
+definePageMeta({ layout: 'default' })
+
+import { defineComponent } from 'vue'
+
+const { request } = useApi()
+
+type Me = { _id: string; username: string; name: string; email: string; role: 'user' | 'admin' }
+type HistoryItem = any
+type UserRow = {
+  _id: string
+  username: string
+  name: string
+  email: string
+  role: 'user' | 'admin'
+  usageCount: number
+  lastUsed: string | null
+}
+
+const me = ref<Me | null>(null)
+const loadingMe = ref(true)
+const meError = ref('')
+
+const adminView = ref<'users' | 'all'>('users')
+
+const filters = reactive({ q: '', label: '', from: '', to: '' })
+
+const items = ref<HistoryItem[]>([])
+const page = ref(1)
+const totalPages = ref(1)
+const loading = ref(false)
+const error = ref('')
+
+const users = ref<UserRow[]>([])
+const userSearch = ref('')
+const selectedUser = ref<UserRow | null>(null)
+const loadingUsers = ref(false)
+const usersError = ref('')
+
+const detailOpen = ref(false)
+const detailItem = ref<any>(null)
+
+// Popup รายการประวัติ (สำหรับ admin)
+const historyOpen = ref(false)
+const historyTitle = ref('')
+const historyMode = ref<'user' | 'all'>('user')
+
+function openDetail(it: any) {
+  detailItem.value = it
+  detailOpen.value = true
+}
+
+function closeDetail() {
+  detailOpen.value = false
+  detailItem.value = null
+}
+
+function clearFilters() {
+  filters.q = ''
+  filters.label = ''
+  filters.from = ''
+  filters.to = ''
+  reload(1)
+}
+
+function closeHistory() {
+  historyOpen.value = false
+}
+
+function openAllHistory() {
+  if (!me.value || me.value.role !== 'admin') return
+  historyMode.value = 'all'
+  historyTitle.value = 'ประวัติทั้งหมดของทุกคน'
+  selectedUser.value = null
+  historyOpen.value = true
+  reload(1)
+}
+
+function setAdminView(v: 'users' | 'all') {
+  adminView.value = v
+  selectedUser.value = null
+  items.value = []
+  historyOpen.value = false
+  if (v === 'users') loadUsers()
+}
+
+async function loadMe() {
+  loadingMe.value = true
+  meError.value = ''
+  try {
+    me.value = await request<Me>('/me')
+  } catch (e: any) {
+    meError.value = e?.message || 'โหลดข้อมูลผู้ใช้ไม่สำเร็จ'
+  } finally {
+    loadingMe.value = false
+  }
+}
+
+function qs(p: number) {
+  const params: Record<string, string> = {
+    page: String(p),
+    limit: '20'
+  }
+  if (filters.q) params.q = filters.q
+  if (filters.label) params.label = filters.label
+  if (filters.from) params.from = filters.from
+  if (filters.to) params.to = filters.to
+  return new URLSearchParams(params).toString()
+}
+
+async function reload(p = 1) {
+  if (!me.value) return
+  loading.value = true
+  error.value = ''
+  try {
+    let url = ''
+    if (me.value.role === 'user') {
+      url = `/history/my?${qs(p)}`
+    } else {
+      // Admin: โหลดเฉพาะตอนเปิด popup เพื่อไม่ให้ไปโชว์ด้านล่าง
+      if (!historyOpen.value) {
+        items.value = []
+        page.value = 1
+        totalPages.value = 1
+        return
+      }
+      if (historyMode.value === 'all') {
+        url = `/history/all?${qs(p)}`
+      } else {
+        if (!selectedUser.value) {
+          items.value = []
+          page.value = 1
+          totalPages.value = 1
+          return
+        }
+        url = `/history/user/${selectedUser.value._id}?${qs(p)}`
+      }
+    }
+
+    const res = await request<any>(url)
+    items.value = res.items || []
+    page.value = res.page || 1
+    totalPages.value = res.totalPages || 1
+  } catch (e: any) {
+    error.value = e?.message || 'โหลดประวัติไม่สำเร็จ'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadUsers() {
+  if (!me.value || me.value.role !== 'admin') return
+  loadingUsers.value = true
+  usersError.value = ''
+  try {
+    const res = await request<any>(`/history/users?q=${encodeURIComponent(userSearch.value || '')}`)
+    users.value = res.items || []
+  } catch (e: any) {
+    usersError.value = e?.message || 'โหลดรายชื่อผู้ใช้ไม่สำเร็จ'
+  } finally {
+    loadingUsers.value = false
+  }
+}
+
+function selectUser(u: UserRow) {
+  if (!me.value || me.value.role !== 'admin') return
+  historyMode.value = 'user'
+  selectedUser.value = u
+  historyTitle.value = `ประวัติของ: ${u.username} (${u.name})`
+  historyOpen.value = true
+  reload(1)
+}
+
+onMounted(async () => {
+  await loadMe()
+  if (me.value?.role === 'admin') {
+    await loadUsers()
+  }
+  await reload(1)
+})
+
+// Local component (list + pagination)
+const HistoryList = defineComponent({
+  name: 'HistoryList',
+  props: {
+    items: { type: Array as any, required: true },
+    loading: { type: Boolean, required: true },
+    error: { type: String, required: true },
+    page: { type: Number, required: true },
+    totalPages: { type: Number, required: true }
+  },
+  emits: ['go', 'open'],
+  methods: {
+    go(p: number) {
+      this.$emit('go', p)
+    },
+    open(it: any) {
+      this.$emit('open', it)
+    }
+  },
+  template: `
+    <div>
+      <LoadingSpinner v-if="loading" />
+      <p v-if="error" style="color:var(--danger); margin:10px 0 0;">{{ error }}</p>
+
+      <div v-if="items.length" style="display:grid; gap:10px; margin-top:10px;">
+        <BaseCard v-for="it in items" :key="it._id" style="cursor:pointer;" @click="open(it)">
+          <div style="display:flex; gap:12px; align-items:center;">
+            <img
+              v-if="it.imagePath"
+              :src="'/' + it.imagePath"
+              style="width:84px; height:84px; object-fit:cover; border-radius:10px; border:1px solid var(--line);"
+            />
+            <div style="flex:1;">
+              <div>
+                <b>{{ it.username || '-' }}</b>
+                — <b>{{ it.label }}</b>
+                ({{ (it.confidence * 100).toFixed(1) }}%)
+              </div>
+              <div class="muted" style="font-size:12px; margin-top:2px;">
+                <span v-if="it.isCorrect === true">✅ วิเคราะห์: ถูก</span>
+                <span v-else-if="it.isCorrect === false">❌ วิเคราะห์: ไม่ถูก</span>
+                <span v-else>🕒 วิเคราะห์: ยังไม่ตอบ</span>
+                <span v-if="it.correctedLabel"> · แก้เป็น: <b>{{ it.correctedLabel }}</b></span>
+              </div>
+              <div class="muted" v-if="it.suggestion">{{ it.suggestion }}</div>
+              <div class="muted">{{ new Date(it.createdAt).toLocaleString() }}</div>
+            </div>
+          </div>
+        </BaseCard>
+      </div>
+
+      <div v-else-if="!loading" class="muted" style="margin-top:10px;">ยังไม่มีประวัติ</div>
+
+      <div v-if="totalPages > 1" class="row" style="gap:10px; margin-top:12px;">
+        <BaseButton variant="secondary" :disabled="page<=1" @click="go(page-1)">ก่อนหน้า</BaseButton>
+        <div class="muted">หน้า {{ page }} / {{ totalPages }}</div>
+        <BaseButton variant="secondary" :disabled="page>=totalPages" @click="go(page+1)">ถัดไป</BaseButton>
+      </div>
+    </div>
+  `
+})
+</script>
+
+<style scoped>
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 9999;
+}
+
+.modal {
+  width: min(760px, 100%);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+}
+
+.modal-lg {
+  width: min(920px, 100%);
+}
+</style>

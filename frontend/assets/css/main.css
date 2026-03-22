@@ -1,0 +1,75 @@
+:root {
+  --bg: #0b1220;
+  --card: #121a2b;
+  --text: #e7eefc;
+  --muted: #a8b3cf;
+  --line: rgba(255,255,255,0.08);
+  --primary: #6ea8fe;
+  --danger: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui; }
+a { color: inherit; text-decoration: none; }
+
+.container {
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.muted { color: var(--muted); }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+input, button { font: inherit; }
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="search"],
+input[type="date"],
+select,
+textarea{
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  outline: none;
+}
+
+/* ทำให้ date picker/auto-fill ไม่กลายเป็นกล่องขาว */
+input[type="date"]{
+  color-scheme: dark;
+}
+
+select{
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.55) 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.55) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+}
+
+input:focus, select:focus, textarea:focus{
+  border-color: rgba(110,168,254,0.6);
+  box-shadow: 0 0 0 3px rgba(110,168,254,0.15);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 16px 0;
+}
