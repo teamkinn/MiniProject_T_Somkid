@@ -1,0 +1,4 @@
+general
+hazardous
+organic
+recycle
